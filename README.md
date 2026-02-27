@@ -30,6 +30,7 @@ This runbook covers the non-obvious stuff. The gotchas that cost hours of debugg
 7. [Channel & Group Restrictions](#7-channel--group-restrictions)
 8. [Deployment & Verification](#8-deployment--verification)
 9. [Quick Reference](#9-quick-reference)
+10. [Troubleshooting](#10-troubleshooting)
 
 ---
 
@@ -802,6 +803,65 @@ openclaw doctor --fix
 - [ ] Restart gateway (stop + kill + install)
 - [ ] Run verification tests with fresh session IDs
 - [ ] Run `openclaw security audit --deep` again and confirm improvements
+
+---
+
+## 10. Troubleshooting
+
+Common issues after applying hardening changes.
+
+### Agent stops responding entirely
+
+**Symptom:** The agent receives messages but never replies.
+
+**Cause:** The `message` tool is in the deny list. Without it, the agent cannot send responses in channels.
+
+**Fix:** Remove `message` from the `deny` array. The `messaging` profile includes it by default, so you only need to ensure it's not explicitly denied.
+
+### Agent can't find any memories
+
+**Symptom:** `memory_search` returns no results, even though the agent previously had access to knowledge.
+
+**Cause:** Setting `memorySearch.extraPaths: []` at the per-agent level overrides the global default and removes all extra search paths. The agent can only search its own workspace.
+
+**Fix:** If the agent needs memory search, add back specific safe paths to `extraPaths`. If not, remove `memory_search` and `memory_get` from the `allow` list to avoid confusion.
+
+### Tool changes don't take effect
+
+**Symptom:** You denied `exec` in the config, but the agent still executes commands.
+
+**Cause:** Tool definitions are cached per session. Existing sessions retain the old tool set.
+
+**Fix:** Always test with a fresh session ID. See [Section 8](#8-deployment--verification) for the `$(date +%s)` pattern.
+
+### Gateway won't start after config change
+
+**Symptom:** `openclaw gateway install` fails or the gateway exits immediately.
+
+**Cause:** Invalid JSON syntax or unrecognized keys in `openclaw.json`. The gateway starts in “best-effort” mode, silently ignoring invalid keys.
+
+**Fix:**
+```bash
+# Validate JSON syntax
+jq . ~/.openclaw/openclaw.json > /dev/null
+
+# Run diagnostics
+openclaw doctor --fix
+
+# Check for port conflicts
+lsof -ti :18789
+```
+
+### Agent still reveals system info despite AGENTS.md rules
+
+**Symptom:** The agent ignores your security rules and discloses workspace contents, tool lists, or system details.
+
+**Possible causes:**
+1. **Security rules are in SECURITY.md** instead of AGENTS.md. SECURITY.md is not injected into the system prompt (see [Section 5](#5-workspace-files-the-critical-section)).
+2. **Rules are not at the top** of AGENTS.md. Other content before the rules may dilute their effect.
+3. **Provider-side prompt caching.** The model provider may cache the system prompt for a few minutes.
+
+**Fix:** Ensure rules are the first content in AGENTS.md. Make a trivial edit (add a space) to bust the cache. Wait 2-3 minutes and test with a fresh session.
 
 ---
 
