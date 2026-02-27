@@ -113,7 +113,7 @@ jq '.agents.list[] | {id, memorySearch}' ~/.openclaw/openclaw.json
 
 If `agents.defaults.memorySearch.extraPaths` contains paths to private data, every agent without a per-agent override can search those files.
 
-### List what's in each agent's QMD database
+### List what's in each agent's memory index
 
 ```bash
 for db in ~/.openclaw/memory/*.sqlite; do
@@ -423,9 +423,9 @@ jq '.agents.defaults.memorySearch.extraPaths // "not set"' ~/.openclaw/openclaw.
 
 Setting `extraPaths` to an empty array at the per-agent level overrides the global default. The agent's memory search is now limited to its own workspace.
 
-### QMD cleanup: old embeddings persist after config changes
+### Memory cleanup: old embeddings persist after config changes
 
-Changing `memorySearch.extraPaths` in the config does NOT remove already-indexed files from the agent's QMD database. Embeddings persist in SQLite. The agent can still search previously indexed content until you explicitly clean it up.
+Changing `memorySearch.extraPaths` in the config does NOT remove already-indexed files from the agent's memory database. Embeddings persist in SQLite. The agent can still search previously indexed content until you explicitly clean it up.
 
 **Check what's indexed:**
 
@@ -775,7 +775,7 @@ jq '.agents.defaults.memorySearch' ~/.openclaw/openclaw.json
 # File permissions check
 ls -la ~/.openclaw/openclaw.json
 
-# QMD database contents per agent
+# Memory index contents per agent
 for db in ~/.openclaw/memory/*.sqlite; do
   echo "=== $(basename $db) ==="
   sqlite3 "$db" "SELECT path FROM files ORDER BY path;" 2>/dev/null
@@ -795,7 +795,7 @@ openclaw doctor --fix
 - [ ] Fix file permissions: `chmod 600 ~/.openclaw/openclaw.json`
 - [ ] Move security rules to AGENTS.md (not SECURITY.md)
 - [ ] Override `memorySearch.extraPaths: []` per public agent
-- [ ] Clean up QMD databases (remove leaked entries from other agents‘ data)
+- [ ] Clean up memory databases (remove leaked entries from other agents‘ data)
 - [ ] Set `dmPolicy: "disabled"` for group-only bots
 - [ ] Set `groupPolicy: "allowlist"` (not `"open"`)
 - [ ] Set `requireMention: true` for group chats
