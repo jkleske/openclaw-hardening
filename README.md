@@ -6,9 +6,9 @@ A practical, step-by-step guide to locking down OpenClaw agents for public-facin
 
 You run OpenClaw and have agents that interact with people other than you -- group chats, shared channels, bots that respond to mentions. You want to make sure a clever prompt injection doesn't turn your cultural commentator into an `exec rm -rf /` enthusiast.
 
-This runbook covers the non-obvious stuff. The gotchas that cost hours of debugging because the behavior was silent, cached, or contradicted reasonable assumptions.
+This runbook covers the non-obvious stuff. The gotchas that cost hours of debugging because the behavior was silent, cached, or contrary to reasonable assumptions.
 
-> **Give this document to Claude Code (or any coding assistant) and it can execute the hardening steps for you.** Every command in this guide is copy-paste ready.
+> **Give this document to Claude Code (or any coding assistant) and it can execute the hardening steps for you.** Every command runs as written.
 
 ### Prerequisites
 
@@ -156,7 +156,7 @@ Look for files that don't belong. Relative paths starting with `../../` are a re
 
 | Agent type | Recommended profile | Allow additions | Key denials |
 |-----------|-------------------|----------------|-------------|
-| Group chat bot | `messaging` | `read` (+ `fs.workspaceOnly`), `memory_search`, `image` | `exec`, `write`, `edit`, `process`, `cron`, `gateway`, `sessions_spawn`, `browser` |
+| Group chat bot | `messaging` | `read` (+ `fs.workspaceOnly`), `memory_search`, `image` | `exec`, `bash`, `write`, `edit`, `apply_patch`, `process`, `cron`, `gateway`, `sessions_spawn`, `browser`, `nodes` |
 | Personal assistant (DM only) | `coding` | -- | `gateway`, `cron`, `sessions_spawn` |
 | Read-only information agent | `minimal` | `read` (+ `fs.workspaceOnly`), `memory_search` | Everything else |
 | Monitoring / heartbeat | `minimal` | -- | -- |
@@ -168,7 +168,7 @@ Look for files that don't belong. Relative paths starting with `../../` are a re
   "tools": {
     "profile": "messaging",
     "allow": ["read", "memory_search", "memory_get", "image"],
-    "deny": ["write", "edit", "exec", "process", "cron", "gateway", "sessions_spawn", "browser"],
+    "deny": ["write", "edit", "apply_patch", "exec", "bash", "process", "cron", "gateway", "sessions_spawn", "browser", "nodes"],
     "fs": {
       "workspaceOnly": true
     },
@@ -261,6 +261,7 @@ The `elevated` flag gates sudo-equivalent execution. The security audit flags `o
 chmod 700 ~/.openclaw/
 chmod 600 ~/.openclaw/openclaw.json
 chmod -R 600 ~/.openclaw/credentials/
+find ~/.openclaw/agents/ -name "*.jsonl" -exec chmod 600 {} \;
 ```
 
 The config file contains API keys, bot tokens, and credentials in plaintext. At default 644 permissions, any user on the host can read them. The security audit catches this as `fs.config.perms_world_readable`.
@@ -334,7 +335,8 @@ openclaw agent --agent YOUR_AGENT_ID \
 **Interpreting results:**
 - Agent quotes the canary token **without** calling the `read` tool --> file IS in the system prompt
 - Agent calls `read` to get the content --> file is NOT injected, agent reads on demand
-- Agent says the file doesn't exist --> file is neither injected nor readable
+- Agent says the file doesn't exist --> file is neither injected nor readable (check `fs.workspaceOnly` and tool restrictions)
+- Agent refuses to read any file --> `read` is denied in the agent's tool config; this test requires `read` to be allowed
 
 ### The default AGENTS.md is dangerous for public agents
 
@@ -480,6 +482,24 @@ For defense-in-depth: if your agent doesn't need memory search in group contexts
 
 **Recommendation:** Use `allowlist` for any agent with tools beyond `minimal`. The security audit flags `open` + elevated/runtime tools as Critical.
 
+To allowlist specific groups, add their IDs to the channel config:
+
+```json
+{
+  "channels": {
+    "whatsapp": {
+      "groupPolicy": "allowlist",
+      "groups": {
+        "GROUP_CHAT_ID_1": { "requireMention": true },
+        "GROUP_CHAT_ID_2": { "requireMention": true }
+      }
+    }
+  }
+}
+```
+
+Find group IDs by sending a test message to the group and checking the gateway log: `grep 'inbound' /tmp/openclaw/openclaw-*.log | tail -5`.
+
 ### DM policy
 
 ```json
@@ -567,7 +587,7 @@ For groups where the operator needs elevated access but other members shouldn't:
 }
 ```
 
-The default `dmScope: "main"` routes all DMs to a single shared context. Sensitive information from one conversation can leak into another. `per-channel-peer` isolates each channel+sender pair into its own session context.
+The default `dmScope: "main"` routes all DMs to a single shared session. This means conversation history accumulates across all senders -- User B's session can see messages from User A's earlier conversation. `per-channel-peer` isolates each channel+sender pair into its own session context, preventing this cross-contamination.
 
 ---
 
@@ -596,7 +616,7 @@ openclaw gateway install
 sleep 3 && openclaw gateway status
 ```
 
-**Why the kill step matters:** `openclaw gateway stop` stops the LaunchAgent (macOS) or systemd unit, but does NOT kill the running gateway process. The process keeps listening on port 18789. Attempting `gateway install` while the port is occupied fails silently or starts a second instance.
+**Why the kill step matters:** `openclaw gateway stop` stops the LaunchAgent (macOS) or systemd unit, but does NOT kill the running gateway process. The process keeps listening on port 18789. Attempting `gateway install` while the port is occupied fails silently or starts a second instance. If `kill` doesn't work (process ignores SIGTERM), use `kill -9 $(lsof -ti :18789)`.
 
 ### Config validation
 
@@ -627,7 +647,7 @@ Models hallucinate file contents. If a file was previously visible in a session 
 Symptoms:
 - Agent returns outdated file content even though the file was just modified
 - Agent claims to have read a file but the content doesn't match what's on disk
-- Security rules from an old SECURITY.md appear despite the file being rewritten
+- Old behavioral rules persist despite AGENTS.md being rewritten
 
 **Fix:** Always test in a completely fresh session. If the problem persists, it's likely provider-side prompt caching. Wait a few minutes or change the agent's system prompt slightly to bust the cache.
 
@@ -690,7 +710,7 @@ Compare the output to your pre-hardening baseline. The findings specific to your
 
 ### Hardened baseline config
 
-This is a complete, production-ready configuration snippet for a group chat bot agent. Merge it into the relevant `agents.list[]` entry in your `openclaw.json`.
+Complete configuration snippet for a group chat bot agent. Merge it into the relevant `agents.list[]` entry in your `openclaw.json`.
 
 ```json
 {
@@ -734,7 +754,7 @@ This is a complete, production-ready configuration snippet for a group chat bot 
 
 | Profile | `group:runtime` | `group:fs` | `group:sessions` | `group:memory` | `group:messaging` |
 |---------|:-:|:-:|:-:|:-:|:-:|
-| `minimal` | -- | -- | -- | -- | -- |
+| `minimal` | -- | -- | `session_status` only | -- | -- |
 | `messaging` | -- | -- | partial | -- | yes |
 | `coding` | yes | yes | yes | yes | -- |
 | `full` | yes | yes | yes | yes | yes |
