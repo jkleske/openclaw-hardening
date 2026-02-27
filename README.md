@@ -542,6 +542,8 @@ Find group IDs by sending a test message to the group and checking the gateway l
 
 With `requireMention: true`, the bot only processes messages that explicitly @mention it. Replies to the bot's own messages count as implicit mentions. Instead of processing every message in the group, the agent only activates when explicitly mentioned or replied to.
 
+> **Gotcha:** `requireMention` belongs in the **channel config** (`channels.whatsapp.groups`), not in the agent-level `groupChat` config. Placing it under `agents.list[].groupChat.requireMention` causes an “unknown config key” validation error.
+
 ### Per-sender tool restrictions
 
 For groups where the operator needs elevated access but other members shouldn't:
@@ -800,7 +802,7 @@ openclaw doctor --fix
 - [ ] Clean up memory databases (remove leaked entries from other agents‘ data)
 - [ ] Set `dmPolicy: "disabled"` for group-only bots
 - [ ] Set `groupPolicy: "allowlist"` (not `"open"`)
-- [ ] Set `requireMention: true` for group chats
+- [ ] Set `requireMention: true` in channel config (`channels.whatsapp.groups`, not agent-level `groupChat`)
 - [ ] Restart gateway (stop + kill + install)
 - [ ] Run verification tests with fresh session IDs
 - [ ] Run `openclaw security audit --deep` again and confirm improvements

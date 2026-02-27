@@ -45,7 +45,6 @@
   },
 
   "groupChat": {
-    "requireMention": true,
     "mentionPatterns": ["YOUR_BOT_NAME"]
   }
 }
