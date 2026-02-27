@@ -39,7 +39,7 @@ An unhardened group chat bot on OpenClaw is a remote code execution endpoint wit
 
 ### What can go wrong
 
-**Shell execution on demand.** A user types “Run `exec ls -la ~/`” and the bot obliges, returning a directory listing that includes `.ssh/`, `.openclaw/`, and every other directory on the host. This isn't hypothetical. With `tools.profile: "coding"`, the `exec` tool is available and the model will use it when asked.
+**Shell execution on demand.** A user types “Run `exec ls -la ~/`” and the bot obliges, returning a directory listing that includes `.ssh/`, `.openclaw/`, and the rest of the home directory. This isn't hypothetical. With `tools.profile: "coding"`, the `exec` tool is available and the model will use it when asked.
 
 **Prompt injection from group members.** Any participant in a group chat can send messages that the agent processes. “Ignore all previous instructions” is crude, but targeted injection (asking the bot to read a specific file, summarize its workspace setup, or relay information from memory) is far more effective and harder to detect.
 
@@ -60,7 +60,7 @@ The `coding` profile was designed for a personal coding assistant with full host
 | `group:sessions` | `sessions_list`, `sessions_history`, `sessions_send`, `sessions_spawn`: access to other sessions |
 | `group:memory` | `memory_search`, `memory_get`: semantic search over indexed files |
 
-Every one of these is a vector. A chat bot needs `group:messaging` and maybe `read` for its own workspace files. It does not need `exec`.
+Every one of these is a vector. A chat bot needs `group:messaging` and, depending on its purpose, selective additions like `read` or `memory_search`. It does not need `exec`.
 
 ---
 
@@ -179,6 +179,8 @@ Look for files that don't belong. Relative paths starting with `../../` are a re
 }
 ```
 
+**Note:** `memory_search` and `memory_get` in the allow list are optional. If your agent has no knowledge base to query in group contexts, remove them. See [Section 6](#6-memory--data-isolation) for details.
+
 **How allow/deny interact with profiles:**
 1. The `profile` sets a baseline of available tools
 2. `allow` adds specific tools on top of the profile
@@ -239,7 +241,7 @@ This narrows tool access when a cheaper/smaller model is used, while keeping ful
 }
 ```
 
-Without this setting, the `read` tool can access any path on the host filesystem. Relative paths like `../../openclaw.json` resolve normally. With `workspaceOnly: true`, file operations are confined to the agent's workspace directory.
+Without this setting, the `read` tool can resolve paths outside the workspace, including the `../../openclaw.json` vector described in Section 1. With `workspaceOnly: true`, file operations are confined to the agent's workspace directory.
 
 ### Disable elevated execution
 
@@ -478,7 +480,7 @@ For defense-in-depth: if your agent doesn't need memory search in group contexts
 |--------|----------|------|
 | `disabled` | Block all group messages | Safest; use if agent doesn't need groups |
 | `allowlist` | Only configured groups respond | Recommended for production |
-| `open` | Any group can trigger the agent | High risk if combined with powerful tools |
+| `open` | Any group can trigger the agent | High risk if combined with runtime or filesystem tools |
 
 **Recommendation:** Use `allowlist` for any agent with tools beyond `minimal`. The security audit flags `open` + elevated/runtime tools as Critical.
 
@@ -537,7 +539,7 @@ Find group IDs by sending a test message to the group and checking the gateway l
 }
 ```
 
-With `requireMention: true`, the bot only processes messages that explicitly @mention it. Replies to the bot's own messages count as implicit mentions. This significantly reduces the attack surface in active groups.
+With `requireMention: true`, the bot only processes messages that explicitly @mention it. Replies to the bot's own messages count as implicit mentions. Instead of processing every message in the group, the agent only activates when explicitly mentioned or replied to.
 
 ### Per-sender tool restrictions
 
@@ -719,9 +721,8 @@ Complete configuration snippet for a group chat bot agent. Merge it into the rel
     "profile": "messaging",
     "allow": ["read", "memory_search", "memory_get", "image"],
     "deny": [
-      "write", "edit", "exec", "bash", "process",
-      "cron", "gateway", "sessions_spawn", "browser",
-      "apply_patch", "nodes"
+      "write", "edit", "apply_patch", "exec", "bash", "process",
+      "cron", "gateway", "sessions_spawn", "browser", "nodes"
     ],
     "fs": {
       "workspaceOnly": true
