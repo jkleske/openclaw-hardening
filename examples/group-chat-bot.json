@@ -1,0 +1,49 @@
+{
+  "//": "Hardened OpenClaw config for a group chat bot.",
+  "//note": "Merge this into your agents.list[] entry in openclaw.json.",
+
+  "id": "YOUR_AGENT_ID",
+
+  "tools": {
+    "profile": "messaging",
+
+    "allow": [
+      "read",
+      "memory_search",
+      "memory_get",
+      "image"
+    ],
+
+    "deny": [
+      "write",
+      "edit",
+      "apply_patch",
+      "exec",
+      "bash",
+      "process",
+      "cron",
+      "gateway",
+      "sessions_spawn",
+      "browser",
+      "canvas",
+      "nodes"
+    ],
+
+    "fs": {
+      "workspaceOnly": true
+    },
+
+    "elevated": {
+      "enabled": false
+    }
+  },
+
+  "memorySearch": {
+    "extraPaths": []
+  },
+
+  "groupChat": {
+    "requireMention": true,
+    "mentionPatterns": ["YOUR_BOT_NAME"]
+  }
+}

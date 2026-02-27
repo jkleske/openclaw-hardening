@@ -1,0 +1,28 @@
+{
+  "//": "Hardened OpenClaw config for a personal assistant (DM only, trusted operator).",
+  "//note": "Merge this into your agents.list[] entry in openclaw.json.",
+
+  "id": "YOUR_AGENT_ID",
+
+  "tools": {
+    "profile": "coding",
+
+    "deny": [
+      "gateway",
+      "cron",
+      "sessions_spawn"
+    ],
+
+    "fs": {
+      "workspaceOnly": false
+    },
+
+    "elevated": {
+      "enabled": false
+    }
+  },
+
+  "memorySearch": {
+    "//": "Personal assistant can use global extraPaths (trusted context)."
+  }
+}

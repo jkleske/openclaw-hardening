@@ -1,0 +1,45 @@
+{
+  "//": "Maximum restriction: read-only agent with minimal tools.",
+  "//note": "Merge this into your agents.list[] entry in openclaw.json.",
+
+  "id": "YOUR_AGENT_ID",
+
+  "tools": {
+    "profile": "minimal",
+
+    "allow": [
+      "read",
+      "memory_search"
+    ],
+
+    "deny": [
+      "write",
+      "edit",
+      "apply_patch",
+      "exec",
+      "bash",
+      "process",
+      "cron",
+      "gateway",
+      "sessions_spawn",
+      "sessions_send",
+      "browser",
+      "canvas",
+      "nodes",
+      "message",
+      "image"
+    ],
+
+    "fs": {
+      "workspaceOnly": true
+    },
+
+    "elevated": {
+      "enabled": false
+    }
+  },
+
+  "memorySearch": {
+    "extraPaths": []
+  }
+}
