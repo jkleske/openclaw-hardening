@@ -26,7 +26,9 @@
       "sessions_spawn",
       "browser",
       "canvas",
-      "nodes"
+      "nodes",
+      "web_search",
+      "web_fetch"
     ],
 
     "fs": {
