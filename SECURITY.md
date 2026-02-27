@@ -6,9 +6,10 @@ This repository contains **documentation**, not executable software. “Vulnerab
 
 If you find advice in this runbook that is wrong, outdated, or could lead to a less secure configuration:
 
-1. **Open a public issue.** Since this is documentation, there is no exploit risk from public disclosure. Use the label `correction` if available.
-2. **Describe the problem clearly:** which section, what the current advice says, and why it is incorrect or dangerous.
-3. **Suggest a fix** if you have one.
+1. **For most issues: open a public issue.** Since this is documentation, public disclosure is usually fine. Use the label `correction` if available.
+2. **For sensitive cases:** if you believe the flawed advice is actively being relied upon and public disclosure could cause harm before a fix is ready, use [GitHub's private vulnerability reporting](https://github.com/jkleske/openclaw-hardening/security/advisories/new) instead.
+3. **Describe the problem clearly:** which section, what the current advice says, and why it is incorrect or dangerous.
+4. **Suggest a fix** if you have one.
 
 ## Scope
 
