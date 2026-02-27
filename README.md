@@ -2,6 +2,8 @@
 
 A practical, step-by-step guide to locking down OpenClaw agents for public-facing environments. Born from hands-on hardening of a group chat bot that could execute shell commands when asked politely.
 
+> Last reviewed: 2026-02-27 · Covers OpenClaw through 2026.2.26
+
 ## Who this is for
 
 You run OpenClaw and have agents that interact with people other than you: group chats, shared channels, bots that respond to mentions. You want to make sure a clever prompt injection doesn't turn your cultural commentator into an `exec rm -rf /` enthusiast.
@@ -12,7 +14,7 @@ This runbook covers the non-obvious stuff. The gotchas that cost hours of debugg
 
 ### Prerequisites
 
-- OpenClaw 2026.2+ installed and running
+- OpenClaw 2026.2.25+ installed and running (some features require 2026.2.26+, noted inline)
 - SSH access to your gateway host (or local terminal if running locally)
 - `jq` installed (`brew install jq` / `apt install jq`)
 - `sqlite3` available (ships with macOS and most Linux distros)
@@ -28,9 +30,10 @@ This runbook covers the non-obvious stuff. The gotchas that cost hours of debugg
 5. [Workspace Files](#5-workspace-files-the-critical-section)
 6. [Memory & Data Isolation](#6-memory--data-isolation)
 7. [Channel & Group Restrictions](#7-channel--group-restrictions)
-8. [Deployment & Verification](#8-deployment--verification)
-9. [Quick Reference](#9-quick-reference)
-10. [Troubleshooting](#10-troubleshooting)
+8. [Behavioral Hardening for Group Bots](#8-behavioral-hardening-for-group-bots)
+9. [Deployment & Verification](#9-deployment--verification)
+10. [Quick Reference](#10-quick-reference)
+11. [Troubleshooting](#11-troubleshooting)
 
 ---
 
@@ -268,6 +271,37 @@ find ~/.openclaw/agents/ -name "*.jsonl" -exec chmod 600 {} \;
 ```
 
 The config file contains API keys, bot tokens, and credentials in plaintext. At default 644 permissions, any user on the host can read them. The security audit catches this as `fs.config.perms_world_readable`.
+
+### External Secrets Management (2026.2.26+)
+
+OpenClaw 2026.2.26 introduced a secrets management system that replaces plaintext credentials in `openclaw.json` with references to an external secret store.
+
+**Audit for plaintext credentials:**
+
+```bash
+openclaw secrets audit
+```
+
+This scans your config for API keys, tokens, and passwords stored in plaintext and reports which entries should be migrated.
+
+**Migrate to external secrets:**
+
+```bash
+# Configure the secrets backend (one-time setup)
+openclaw secrets configure
+
+# Move plaintext credentials to the secret store
+openclaw secrets apply
+
+# Reload the gateway to pick up the changes
+openclaw secrets reload
+```
+
+After migration, `openclaw.json` contains secret references (`$secret:KEY_NAME`) instead of raw values. The gateway resolves them at runtime from the configured backend.
+
+This eliminates the most critical vector: even if an agent reads `openclaw.json` through a path traversal, it sees references, not credentials.
+
+> See [OpenClaw Secrets Docs](https://docs.openclaw.ai/gateway/secrets) for backend options and configuration details.
 
 ### Credential storage paths to protect
 
@@ -582,6 +616,75 @@ For groups where the operator needs elevated access but other members shouldn't:
 3. Default/global `toolsBySender` (`*`)
 4. Default/global `tools`
 
+### Binding CLI (2026.2.26+)
+
+Instead of editing `openclaw.json` directly to manage agent-channel bindings, you can use the CLI:
+
+```bash
+# List current bindings
+openclaw agents bindings
+
+# Bind an agent to a channel/group
+openclaw agents bind --agent YOUR_AGENT_ID --channel whatsapp --group GROUP_CHAT_ID
+
+# Unbind
+openclaw agents unbind --agent YOUR_AGENT_ID --channel whatsapp --group GROUP_CHAT_ID
+```
+
+This is functionally equivalent to editing the `bindings` array in `openclaw.json` but avoids manual JSON editing errors.
+
+### Context management
+
+By default, group chat sessions retain unlimited message history. For active groups, this means the agent's context window fills up with old messages, increasing cost and reducing response quality.
+
+```json
+{
+  "messages": {
+    "groupChat": {
+      "historyLimit": 30
+    }
+  }
+}
+```
+
+`historyLimit: 30` keeps only the last 30 messages in the agent's context. This is a good balance between conversational continuity and token efficiency.
+
+### Acknowledge reactions
+
+```json
+{
+  "messages": {
+    "ackReactionScope": "group-mentions"
+  }
+}
+```
+
+When set, the agent reacts to messages with an emoji (typically a thinking indicator) when it starts processing. `group-mentions` limits this to messages that @mention the bot, avoiding reaction spam on every group message.
+
+### WhatsApp prerequisites
+
+WhatsApp requires extra setup compared to Telegram:
+
+1. **Enable the plugin.** WhatsApp support is disabled by default:
+   ```json
+   { "plugins": { "entries": { "whatsapp": { "enabled": true } } } }
+   ```
+
+2. **Pair your account.** WhatsApp uses a personal account, not a bot API:
+   ```bash
+   openclaw channels login --channel whatsapp
+   ```
+   Scan the QR code with WhatsApp on your phone. Messages sent by the bot appear as coming from your personal account.
+
+3. **Set `dmPolicy: "disabled"`.** The default `pairing` mode sends pairing codes to every new contact. If you only want group functionality, disable DMs entirely.
+
+4. **Find the correct group ID.** The group ID visible in WhatsApp links is often the announcement channel (where only admins can post), not the chat group. Send a test message and extract the correct ID from the gateway log:
+   ```bash
+   grep 'inbound' /tmp/openclaw/openclaw-*.log | tail -5
+   ```
+
+See [`examples/whatsapp-channel.json`](examples/whatsapp-channel.json) for a complete config.
+
 ### Session isolation for shared contexts
 
 ```json
@@ -596,7 +699,115 @@ The default `dmScope: "main"` routes all DMs to a single shared session. This me
 
 ---
 
-## 8. Deployment & Verification
+## 8. Behavioral Hardening for Group Bots
+
+Tool restrictions and channel configs control what a bot *can* do. Behavioral hardening controls what it *chooses* to do. This section covers instruction-based controls that go into AGENTS.md.
+
+### Rate limiting (instruction-based)
+
+OpenClaw has no native rate limiting for agent responses. The only mechanism is instructing the agent in AGENTS.md to self-limit. This is a soft control (the model may not always comply), but it works well enough to prevent the most common problem: a bot that dominates every conversation.
+
+**Recommended rules for AGENTS.md:**
+
+- Maximum 3-5 messages per hour in an active group
+- Wait 2-3 minutes after your own message before responding again
+- Never send two messages in a row without someone else speaking in between
+- Prefer one complete response over multiple short fragments
+
+These rules prevent the bot from flooding the group. Without them, a bot that's @mentioned in a fast-moving discussion will try to respond to every message, overwhelming the conversation.
+
+### Multi-agent loop prevention
+
+If multiple bots are in the same group, they can trigger each other in infinite loops. Bot A responds to a message, Bot B responds to Bot A, Bot A responds to Bot B, and so on until someone kills a process.
+
+**AGENTS.md rules to prevent this:**
+
+```markdown
+### Other agents
+- Ignore messages from other bots or agents
+- Never respond to your own messages in a thread
+- Specifically ignore: [list agent names here]
+```
+
+List specific agent names rather than relying on a generic “ignore bots” instruction. The model can't reliably distinguish bot messages from human messages without explicit names.
+
+### Platform-specific formatting
+
+Different platforms render markdown differently. WhatsApp strips most markdown formatting. A beautifully formatted table becomes an unreadable wall of pipe characters.
+
+| Format | WhatsApp | Telegram |
+|--------|----------|----------|
+| **Bold** | Yes (`*text*`) | Yes |
+| *Italic* | Yes (`_text_`) | Yes |
+| Bullet lists | Yes | Yes |
+| Tables | No | No (but less broken) |
+| Headers (`#`) | No | No |
+| Code blocks | Partial (monospace only) | Yes |
+| Links | Auto-detected only | Full markdown links |
+
+**AGENTS.md instruction:**
+
+```markdown
+### Platform formatting
+- WhatsApp: Bullet lists and bold text only. No tables, headers, or code blocks.
+- Telegram: Standard markdown works.
+```
+
+### Source citation
+
+Bots with `memory_search` access tend to say “according to my knowledge base” or “based on my information.” This sounds evasive and undermines trust. Instruct the agent to cite sources by name.
+
+**AGENTS.md instruction:**
+
+```markdown
+### Source citation
+- Name sources explicitly: "Author X writes about this..."
+- No generic phrases like "according to my knowledge base"
+```
+
+### Response matrix: when to speak and when to stay silent
+
+Without guidance, a group bot will attempt to respond to every @mention, even when the right move is silence. Define a response matrix in AGENTS.md.
+
+**Example:**
+
+```markdown
+### When to respond
+- Direct question to you: Always respond
+- Topic in your area of expertise + @mention: Respond
+- General discussion without @mention: Stay silent
+- Off-topic @mention: Brief "That's outside my scope" and stop
+- Emotional or personal conversations: Stay silent
+- Arguments or conflicts: Stay silent
+```
+
+The “stay silent” rules are more important than the “respond” rules. A bot that occasionally doesn't answer is fine. A bot that inserts itself into sensitive conversations is a liability.
+
+### Template
+
+See [`examples/AGENTS.md.template`](examples/AGENTS.md.template) for a complete template with all behavioral sections included.
+
+---
+
+## 9. Deployment & Verification
+
+### Heartbeat `directPolicy` breaking change (2026.2.25+)
+
+OpenClaw 2026.2.25 changed the default `heartbeat.directPolicy` from `block` to `allow`. This means heartbeat sessions can now receive and process direct messages by default.
+
+If your agent uses heartbeats (scheduled tasks like `heartbeat.every: "1h"`), this change is security-relevant: an attacker who can send DMs to the agent's channel account could inject messages into a heartbeat session that has elevated tool access.
+
+**If you don't use heartbeats** (`heartbeat.every: "0"` or no heartbeat config), this change has no impact. But set it explicitly as defense-in-depth:
+
+```json
+{
+  "heartbeat": {
+    "directPolicy": "block"
+  }
+}
+```
+
+**If you do use heartbeats**, decide whether heartbeat sessions should accept DMs. For most hardened setups, `block` is the right choice.
 
 ### Gateway restart procedure
 
@@ -711,7 +922,7 @@ Compare the output to your pre-hardening baseline. The findings specific to your
 
 ---
 
-## 9. Quick Reference
+## 10. Quick Reference
 
 ### Hardened baseline config
 
@@ -785,6 +996,9 @@ for db in ~/.openclaw/memory/*.sqlite; do
   sqlite3 "$db" "SELECT path FROM files ORDER BY path;" 2>/dev/null
 done
 
+# Plaintext credential scan (2026.2.26+)
+openclaw secrets audit
+
 # Config validation
 openclaw doctor --fix
 ```
@@ -803,13 +1017,18 @@ openclaw doctor --fix
 - [ ] Set `dmPolicy: "disabled"` for group-only bots
 - [ ] Set `groupPolicy: "allowlist"` (not `"open"`)
 - [ ] Set `requireMention: true` in channel config (`channels.whatsapp.groups`, not agent-level `groupChat`)
+- [ ] Set `messages.groupChat.historyLimit` (recommended: 30)
+- [ ] Set `messages.ackReactionScope: "group-mentions"`
+- [ ] Set `heartbeat.directPolicy: "block"` (default changed to `allow` in 2026.2.25)
+- [ ] Add behavioral rules to AGENTS.md (rate limiting, loop prevention, formatting, sources)
+- [ ] Run `openclaw secrets audit` and migrate plaintext credentials (2026.2.26+)
 - [ ] Restart gateway (stop + kill + install)
 - [ ] Run verification tests with fresh session IDs
 - [ ] Run `openclaw security audit --deep` again and confirm improvements
 
 ---
 
-## 10. Troubleshooting
+## 11. Troubleshooting
 
 Common issues after applying hardening changes.
 
@@ -835,7 +1054,7 @@ Common issues after applying hardening changes.
 
 **Cause:** Tool definitions are cached per session. Existing sessions retain the old tool set.
 
-**Fix:** Always test with a fresh session ID. See [Section 8](#8-deployment--verification) for the `$(date +%s)` pattern.
+**Fix:** Always test with a fresh session ID. See [Section 9](#9-deployment--verification) for the `$(date +%s)` pattern.
 
 ### Gateway won't start after config change
 

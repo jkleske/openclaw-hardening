@@ -1,0 +1,32 @@
+{
+  "//": "WhatsApp channel config for a group-only bot.",
+  "//note": "Merge into the top level of your openclaw.json. Requires the WhatsApp plugin to be explicitly enabled.",
+
+  "channels": {
+    "whatsapp": {
+      "enabled": true,
+      "groupPolicy": "allowlist",
+      "dmPolicy": "disabled",
+      "groups": {
+        "GROUP_CHAT_ID": {
+          "requireMention": true
+        }
+      }
+    }
+  },
+
+  "plugins": {
+    "entries": {
+      "whatsapp": {
+        "enabled": true
+      }
+    }
+  },
+
+  "messages": {
+    "ackReactionScope": "group-mentions",
+    "groupChat": {
+      "historyLimit": 30
+    }
+  }
+}

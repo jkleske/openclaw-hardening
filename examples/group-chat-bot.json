@@ -45,6 +45,6 @@
   },
 
   "groupChat": {
-    "mentionPatterns": ["YOUR_BOT_NAME"]
+    "mentionPatterns": ["@YOUR_BOT_NAME", "YOUR_BOT_NAME", "your_bot_name"]
   }
 }
