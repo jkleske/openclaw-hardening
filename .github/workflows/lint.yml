@@ -1,0 +1,25 @@
+name: Lint
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  json:
+    name: Validate JSON examples
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check JSON syntax
+        run: |
+          failed=0
+          for f in examples/*.json; do
+            echo "Checking $f..."
+            if ! jq . "$f" > /dev/null 2>&1; then
+              echo "  FAIL: Invalid JSON in $f"
+              failed=1
+            fi
+          done
+          exit $failed
