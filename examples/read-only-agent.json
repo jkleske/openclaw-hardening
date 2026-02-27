@@ -26,6 +26,8 @@
       "browser",
       "canvas",
       "nodes",
+      "web_search",
+      "web_fetch",
       "message",
       "image"
     ],

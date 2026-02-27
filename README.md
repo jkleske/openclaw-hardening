@@ -156,7 +156,7 @@ Look for files that don't belong. Relative paths starting with `../../` are a re
 
 | Agent type | Recommended profile | Allow additions | Key denials |
 |-----------|-------------------|----------------|-------------|
-| Group chat bot | `messaging` | `read` (+ `fs.workspaceOnly`), `memory_search`, `image` | `exec`, `bash`, `write`, `edit`, `apply_patch`, `process`, `cron`, `gateway`, `sessions_spawn`, `browser`, `nodes` |
+| Group chat bot | `messaging` | `read` (+ `fs.workspaceOnly`), `memory_search`, `image` | `exec`, `bash`, `write`, `edit`, `apply_patch`, `process`, `cron`, `gateway`, `sessions_spawn`, `browser`, `canvas`, `nodes`, `web_search`, `web_fetch` |
 | Personal assistant (DM only) | `coding` | -- | `gateway`, `cron`, `sessions_spawn` |
 | Read-only information agent | `minimal` | `read` (+ `fs.workspaceOnly`), `memory_search` | Everything else |
 | Monitoring / heartbeat | `minimal` | -- | -- |
@@ -168,7 +168,7 @@ Look for files that don't belong. Relative paths starting with `../../` are a re
   "tools": {
     "profile": "messaging",
     "allow": ["read", "memory_search", "memory_get", "image"],
-    "deny": ["write", "edit", "apply_patch", "exec", "bash", "process", "cron", "gateway", "sessions_spawn", "browser", "nodes"],
+    "deny": ["write", "edit", "apply_patch", "exec", "bash", "process", "cron", "gateway", "sessions_spawn", "browser", "canvas", "nodes", "web_search", "web_fetch"],
     "fs": {
       "workspaceOnly": true
     },
@@ -722,7 +722,8 @@ Complete configuration snippet for a group chat bot agent. Merge it into the rel
     "allow": ["read", "memory_search", "memory_get", "image"],
     "deny": [
       "write", "edit", "apply_patch", "exec", "bash", "process",
-      "cron", "gateway", "sessions_spawn", "browser", "nodes"
+      "cron", "gateway", "sessions_spawn", "browser", "canvas", "nodes",
+      "web_search", "web_fetch"
     ],
     "fs": {
       "workspaceOnly": true
