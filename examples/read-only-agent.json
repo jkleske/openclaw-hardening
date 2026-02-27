@@ -1,5 +1,6 @@
 {
-  "//": "Maximum restriction: read-only agent with minimal tools.",
+  "//": "Read-only agent: can respond in channels but cannot modify files or run commands.",
+  "//silent": "To make the agent completely silent (CLI-only), add 'message' to the deny list.",
   "//note": "Merge this into your agents.list[] entry in openclaw.json.",
 
   "id": "YOUR_AGENT_ID",
@@ -28,7 +29,6 @@
       "nodes",
       "web_search",
       "web_fetch",
-      "message",
       "image"
     ],
 
